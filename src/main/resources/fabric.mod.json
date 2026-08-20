@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "compass_enhanced",
+  "version": "${version}",
+  "name": "Compass Enhanced",
+  "description": "Adds configurable world-target searches to the vanilla compass.",
+  "authors": [
+    "Christine"
+  ],
+  "contact": {
+    "sources": "https://github.com/ChristineZhiMei/mc-compass-enhancement"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.christine.compassenhanced.CompassEnhanced"
+    ],
+    "client": [
+      "dev.christine.compassenhanced.client.CompassEnhancedClient"
+    ]
+  },
+  "mixins": [
+    "compass_enhanced.client.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.14",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
