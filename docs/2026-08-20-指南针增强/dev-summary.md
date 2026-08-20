@@ -24,7 +24,7 @@
 | 组件 | 改动说明 |
 |------|---------|
 | CompassEnhancedClient | 普通右键打开配置界面，Shift + 右键保留原版交互 |
-| CompassConfigScreen | 提供目标、8～64 格范围、三个来源开关、保存/取消及非 BlockItem 警告 |
+| CompassConfigScreen | 提供目标、8～128 格范围、三个来源开关、保存/取消及非 BlockItem 警告 |
 | ItemSelectorScreen / ItemGridWidget | 基于 Registries.ITEM 提供按翻译名或稳定 Identifier 搜索的滚动物品网格 |
 | MinecraftClientMixin | 仅拦截已配置指南针的左键攻击，发送空扫描 Payload |
 | 客户端资源 | 新增 Mixin 配置与中英文界面、结果反馈文本 |

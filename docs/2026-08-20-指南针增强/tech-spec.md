@@ -12,7 +12,7 @@
 
 - 为每个原版指南针 ItemStack 保存独立配置。
 - 仅扫描实体方块、ItemEntity 掉落物、实现 Inventory 的 BlockEntity。
-- 球形范围限制为 8～64 格，只访问已加载区块，10 tick 冷却。
+- 球形范围限制为 8～128 格，只访问已加载区块，10 tick 冷却。
 - 三种来源统一比较距离，使用原版 LodestoneTrackerComponent 锁定最近目标。
 - 架构上禁止读取任何玩家 Inventory。
 
