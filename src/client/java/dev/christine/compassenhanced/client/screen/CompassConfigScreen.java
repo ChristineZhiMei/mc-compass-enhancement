@@ -1,5 +1,6 @@
 package dev.christine.compassenhanced.client.screen;
 
+import dev.christine.compassenhanced.client.history.SearchHistoryStore;
 import dev.christine.compassenhanced.component.CompassConfigComponent;
 import dev.christine.compassenhanced.component.ModComponents;
 import dev.christine.compassenhanced.network.SaveCompassConfigPayload;
@@ -17,6 +18,7 @@ import net.minecraft.util.Identifier;
 
 public final class CompassConfigScreen extends Screen {
     private static final int PANEL_WIDTH = 300;
+    private static final int PANEL_HEIGHT = 214;
 
     private Identifier targetItemId;
     private int radius;
@@ -25,6 +27,7 @@ public final class CompassConfigScreen extends Screen {
     private boolean searchContainers;
 
     private ButtonWidget targetButton;
+    private SearchHistoryWidget historyWidget;
     private ButtonWidget blocksButton;
     private ButtonWidget droppedItemsButton;
     private ButtonWidget containersButton;
@@ -49,34 +52,44 @@ public final class CompassConfigScreen extends Screen {
     @Override
     protected void init() {
         int left = (width - PANEL_WIDTH) / 2;
-        int top = Math.max(8, (height - 210) / 2);
+        int top = Math.max(8, (height - PANEL_HEIGHT) / 2);
 
         targetButton = addDrawableChild(ButtonWidget.builder(targetMessage(), button -> openItemSelector())
-                .dimensions(left, top + 28, PANEL_WIDTH, 20)
+                .dimensions(left, top + 24, PANEL_WIDTH, 20)
                 .build());
 
-        addDrawableChild(new RadiusSlider(left, top + 63, PANEL_WIDTH, 20));
+        historyWidget = addDrawableChild(new SearchHistoryWidget(
+                left,
+                top + 59,
+                PANEL_WIDTH,
+                24,
+                SearchHistoryStore.getInstance().entries(),
+                targetItemId,
+                this::selectTarget
+        ));
+
+        addDrawableChild(new RadiusSlider(left, top + 98, PANEL_WIDTH, 20));
 
         blocksButton = addDrawableChild(ButtonWidget.builder(Text.empty(), button -> {
             searchBlocks = !searchBlocks;
             refreshSourceButtons();
-        }).dimensions(left, top + 98, PANEL_WIDTH, 20).build());
+        }).dimensions(left, top + 133, 146, 20).build());
 
         droppedItemsButton = addDrawableChild(ButtonWidget.builder(Text.empty(), button -> {
             searchDroppedItems = !searchDroppedItems;
             refreshSourceButtons();
-        }).dimensions(left, top + 122, PANEL_WIDTH, 20).build());
+        }).dimensions(left + 154, top + 133, 146, 20).build());
 
         containersButton = addDrawableChild(ButtonWidget.builder(Text.empty(), button -> {
             searchContainers = !searchContainers;
             refreshSourceButtons();
-        }).dimensions(left, top + 146, PANEL_WIDTH, 20).build());
+        }).dimensions(left, top + 157, PANEL_WIDTH, 20).build());
 
         addDrawableChild(ButtonWidget.builder(Text.translatable("gui.cancel"), button -> close())
-                .dimensions(left, top + 188, 146, 20)
+                .dimensions(left, top + 193, 146, 20)
                 .build());
         saveButton = addDrawableChild(ButtonWidget.builder(Text.translatable("gui.save"), button -> save())
-                .dimensions(left + 154, top + 188, 146, 20)
+                .dimensions(left + 154, top + 193, 146, 20)
                 .build());
 
         refreshSourceButtons();
@@ -91,9 +104,13 @@ public final class CompassConfigScreen extends Screen {
 
     private void selectTarget(Identifier itemId) {
         targetItemId = itemId;
+        if (historyWidget != null) {
+            historyWidget.setSelectedItemId(itemId);
+        }
         if (!isBlockItem()) {
             searchBlocks = false;
         }
+        refreshSourceButtons();
     }
 
     private void save() {
@@ -160,28 +177,35 @@ public final class CompassConfigScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         renderBackground(context, mouseX, mouseY, delta);
         int left = (width - PANEL_WIDTH) / 2;
-        int top = Math.max(8, (height - 210) / 2);
+        int top = Math.max(8, (height - PANEL_HEIGHT) / 2);
 
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, top, 0xFFFFFF);
         context.drawTextWithShadow(
                 textRenderer,
                 Text.translatable("screen.compass_enhanced.config.target"),
                 left,
-                top + 17,
+                top + 14,
+                0xA0A0A0
+        );
+        context.drawTextWithShadow(
+                textRenderer,
+                Text.translatable("screen.compass_enhanced.config.history"),
+                left,
+                top + 48,
                 0xA0A0A0
         );
         context.drawTextWithShadow(
                 textRenderer,
                 Text.translatable("screen.compass_enhanced.config.radius"),
                 left,
-                top + 52,
+                top + 87,
                 0xA0A0A0
         );
         context.drawTextWithShadow(
                 textRenderer,
                 Text.translatable("screen.compass_enhanced.config.sources"),
                 left,
-                top + 87,
+                top + 122,
                 0xA0A0A0
         );
 
@@ -192,7 +216,7 @@ public final class CompassConfigScreen extends Screen {
                     textRenderer,
                     Text.translatable("screen.compass_enhanced.config.block_warning"),
                     width / 2,
-                    top + 175,
+                    top + 181,
                     0xFFAA00
             );
         } else if (targetItemId != null && !hasAnySource()) {
@@ -200,7 +224,7 @@ public final class CompassConfigScreen extends Screen {
                     textRenderer,
                     Text.translatable("screen.compass_enhanced.config.source_warning"),
                     width / 2,
-                    top + 175,
+                    top + 181,
                     0xFF5555
             );
         }

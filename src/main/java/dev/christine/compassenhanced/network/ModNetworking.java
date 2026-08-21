@@ -120,6 +120,10 @@ public final class ModNetworking {
         }
 
         SearchResult nearest = result.get();
+        double deltaY = nearest.target().y - player.getY();
+        String direction = deltaY > 2.0
+                ? "up"
+                : deltaY < -2.0 ? "down" : "middle";
         BlockPos targetPos = BlockPos.ofFloored(nearest.target());
         compass.set(
                 DataComponentTypes.LODESTONE_TRACKER,
@@ -133,7 +137,8 @@ public final class ModNetworking {
                         "message.compass_enhanced.found",
                         Text.translatable(targetItem.get().getTranslationKey()),
                         Math.round(Math.sqrt(nearest.distanceSquared())),
-                        Text.translatable(nearest.source().translationKey())
+                        Text.translatable(nearest.source().translationKey()),
+                        Text.translatable("message.compass_enhanced.direction." + direction)
                 ),
                 true
         );

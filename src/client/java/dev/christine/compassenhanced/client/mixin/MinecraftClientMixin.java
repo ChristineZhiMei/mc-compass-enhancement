@@ -1,5 +1,7 @@
 package dev.christine.compassenhanced.client.mixin;
 
+import dev.christine.compassenhanced.client.history.SearchHistoryStore;
+import dev.christine.compassenhanced.component.CompassConfigComponent;
 import dev.christine.compassenhanced.component.ModComponents;
 import dev.christine.compassenhanced.network.ScanCompassPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -21,12 +23,17 @@ abstract class MinecraftClientMixin {
         }
 
         ItemStack mainHandStack = client.player.getMainHandStack();
-        if (!mainHandStack.isOf(Items.COMPASS)
-                || !mainHandStack.contains(ModComponents.COMPASS_CONFIG)) {
+        if (!mainHandStack.isOf(Items.COMPASS)) {
+            return;
+        }
+
+        CompassConfigComponent config = mainHandStack.get(ModComponents.COMPASS_CONFIG);
+        if (config == null) {
             return;
         }
 
         ClientPlayNetworking.send(ScanCompassPayload.INSTANCE);
+        SearchHistoryStore.getInstance().recordAttempt(config.targetItem());
         cir.setReturnValue(false);
     }
 }
