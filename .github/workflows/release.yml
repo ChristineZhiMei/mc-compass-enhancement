@@ -1,0 +1,158 @@
+name: Release
+run-name: Release ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Unique request identifier
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Read release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^mod_version=//p' gradle.properties | tail -n 1)"
+          archive="$(sed -n 's/^archives_base_name=//p' gradle.properties | tail -n 1)"
+          minecraft="$(sed -n 's/^minecraft_version=//p' gradle.properties | tail -n 1)"
+
+          if [[ -z "$version" || -z "$archive" || -z "$minecraft" ]]; then
+            echo "::error::gradle.properties 缺少发布元数据"
+            exit 1
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::mod_version 不是有效版本号：$version"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "minecraft=$minecraft" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release target
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::GitHub Release $TAG 已存在，请先更新 mod_version"
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            tag_commit="$(git rev-list -n 1 "$TAG")"
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "::error::Tag $TAG 已指向其他提交 $tag_commit"
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew clean build --no-daemon
+
+      - name: Verify artifact
+        id: artifact
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jar="build/libs/${ARCHIVE}-${VERSION}.jar"
+          if [[ ! -f "$jar" ]]; then
+            echo "::error::未找到主构建产物：$jar"
+            exit 1
+          fi
+          digest="$(shasum -a 256 "$jar" | awk '{print $1}')"
+          echo "jar=$jar" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        if: steps.target.outputs.exists != 'true'
+        env:
+          TAG: ${{ steps.metadata.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag --annotate "$TAG" --message "Release $TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+
+      - name: Publish GitHub Release
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.metadata.outputs.tag }}
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          MINECRAFT: ${{ steps.metadata.outputs.minecraft }}
+          JAR: ${{ steps.artifact.outputs.jar }}
+          DIGEST: ${{ steps.artifact.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          printf 'Minecraft %s\n\nSHA-256: `%s`\n' "$MINECRAFT" "$DIGEST" > "$notes_file"
+          gh release create "$TAG" "$JAR" \
+            --verify-tag \
+            --generate-notes \
+            --latest \
+            --title "$ARCHIVE v$VERSION" \
+            --notes-file "$notes_file"
+          url="$(gh release view "$TAG" --json url --jq '.url')"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Write summary
+        env:
+          TAG: ${{ steps.metadata.outputs.tag }}
+          JAR: ${{ steps.artifact.outputs.jar }}
+          DIGEST: ${{ steps.artifact.outputs.digest }}
+          RELEASE_URL: ${{ steps.publish.outputs.url }}
+        shell: bash
+        run: |
+          {
+            echo "## Release $TAG"
+            echo
+            echo "- Artifact: \`$JAR\`"
+            echo "- SHA-256: \`$DIGEST\`"
+            echo "- URL: $RELEASE_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
