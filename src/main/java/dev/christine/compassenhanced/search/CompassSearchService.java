@@ -6,9 +6,8 @@ import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 
-import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 public final class CompassSearchService {
     private CompassSearchService() {
@@ -20,19 +19,48 @@ public final class CompassSearchService {
             CompassConfigComponent config
     ) {
         Item targetItem = Registries.ITEM.get(config.targetItem());
+        SearchResult best = null;
 
-        Optional<SearchResult> blockResult = config.searchBlocks()
-                ? BlockScanner.findNearest(world, player, targetItem, config.radius())
-                : Optional.empty();
-        Optional<SearchResult> droppedItemResult = config.searchDroppedItems()
-                ? DroppedItemScanner.findNearest(world, player, targetItem, config.radius())
-                : Optional.empty();
-        Optional<SearchResult> containerResult = config.searchContainers()
-                ? ContainerScanner.findNearest(world, player, targetItem, config.radius())
-                : Optional.empty();
+        if (config.searchDroppedItems()) {
+            best = DroppedItemScanner.findNearest(world, player, targetItem, config.radius()).orElse(null);
+        }
 
-        return Stream.of(blockResult, droppedItemResult, containerResult)
-                .flatMap(Optional::stream)
-                .min(Comparator.comparingDouble(SearchResult::distanceSquared));
+        boolean needsChunks = config.searchContainers() || config.searchBlocks();
+        List<LoadedChunkAccess.LoadedChunk> chunks = needsChunks
+                ? LoadedChunkAccess.collect(
+                        world,
+                        player.getPos(),
+                        config.radius(),
+                        best == null ? Double.POSITIVE_INFINITY : best.distanceSquared()
+                )
+                : List.of();
+
+        if (config.searchContainers()) {
+            Optional<SearchResult> containerResult = ContainerScanner.findNearest(
+                    player,
+                    targetItem,
+                    config.radius(),
+                    chunks,
+                    best == null ? Double.POSITIVE_INFINITY : best.distanceSquared()
+            );
+            if (containerResult.isPresent()) {
+                best = containerResult.get();
+            }
+        }
+
+        if (config.searchBlocks()) {
+            Optional<SearchResult> blockResult = BlockScanner.findNearest(
+                    player,
+                    targetItem,
+                    config.radius(),
+                    chunks,
+                    best == null ? Double.POSITIVE_INFINITY : best.distanceSquared()
+            );
+            if (blockResult.isPresent()) {
+                best = blockResult.get();
+            }
+        }
+
+        return Optional.ofNullable(best);
     }
 }

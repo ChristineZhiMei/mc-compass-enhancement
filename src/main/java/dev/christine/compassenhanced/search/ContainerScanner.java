@@ -4,12 +4,10 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.Item;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.chunk.WorldChunk;
 
+import java.util.List;
 import java.util.Optional;
 
 public final class ContainerScanner {
@@ -17,43 +15,55 @@ public final class ContainerScanner {
     }
 
     public static Optional<SearchResult> findNearest(
-            ServerWorld world,
             ServerPlayerEntity player,
             Item targetItem,
-            int radius
+            int radius,
+            List<LoadedChunkAccess.LoadedChunk> chunks,
+            double bestDistanceSquared
     ) {
         Vec3d origin = player.getPos();
         double radiusSquared = (double) radius * radius;
-        int minChunkX = Math.floorDiv(MathHelper.floor(origin.x - radius), 16);
-        int maxChunkX = Math.floorDiv(MathHelper.floor(origin.x + radius), 16);
-        int minChunkZ = Math.floorDiv(MathHelper.floor(origin.z - radius), 16);
-        int maxChunkZ = Math.floorDiv(MathHelper.floor(origin.z + radius), 16);
-
         SearchResult nearest = null;
-        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
-            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
-                WorldChunk chunk = LoadedChunkAccess.get(world, chunkX, chunkZ);
-                if (chunk == null) {
+        double currentBestDistanceSquared = bestDistanceSquared;
+
+        for (LoadedChunkAccess.LoadedChunk loadedChunk : chunks) {
+            if (cannotBeat(
+                    loadedChunk.minHorizontalDistanceSquared(),
+                    radiusSquared,
+                    currentBestDistanceSquared
+            )) {
+                break;
+            }
+
+            for (BlockEntity blockEntity : loadedChunk.chunk().getBlockEntities().values()) {
+                if (!(blockEntity instanceof Inventory inventory)) {
                     continue;
                 }
 
-                for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-                    if (!(blockEntity instanceof Inventory inventory)
-                            || !containsTarget(inventory, targetItem)) {
-                        continue;
-                    }
-
-                    BlockPos blockPos = blockEntity.getPos();
-                    Vec3d target = Vec3d.ofCenter(blockPos);
-                    double distanceSquared = origin.squaredDistanceTo(target);
-                    if (distanceSquared <= radiusSquared
-                            && (nearest == null || distanceSquared < nearest.distanceSquared())) {
-                        nearest = new SearchResult(target, SearchSource.CONTAINER, distanceSquared);
-                    }
+                BlockPos blockPos = blockEntity.getPos();
+                Vec3d target = Vec3d.ofCenter(blockPos);
+                double distanceSquared = origin.squaredDistanceTo(target);
+                if (distanceSquared > radiusSquared || distanceSquared >= currentBestDistanceSquared) {
+                    continue;
+                }
+                if (containsTarget(inventory, targetItem)) {
+                    nearest = new SearchResult(target, SearchSource.CONTAINER, distanceSquared);
+                    currentBestDistanceSquared = distanceSquared;
                 }
             }
         }
         return Optional.ofNullable(nearest);
+    }
+
+    private static boolean cannotBeat(
+            double lowerBoundSquared,
+            double radiusSquared,
+            double bestDistanceSquared
+    ) {
+        if (Double.isFinite(bestDistanceSquared)) {
+            return lowerBoundSquared >= Math.min(radiusSquared, bestDistanceSquared);
+        }
+        return lowerBoundSquared > radiusSquared;
     }
 
     private static boolean containsTarget(Inventory inventory, Item targetItem) {
